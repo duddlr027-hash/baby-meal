@@ -20,7 +20,6 @@ export const INGREDIENTS = [
   I('tomato', '토마토', 'veg', '개', 1, false, '완숙 토마토'),
   I('green_onion', '대파', 'veg', '대', 1, false, '대파'),
   I('bok_choy', '청경채', 'veg', '봉', 1, false, '청경채'),
-  I('apple', '사과', 'veg', '개', 1, false, '사과'),
   // 육류·계란
   I('beef_mince', '소고기 다짐육', 'meat', 'g', 100, false, '한우 다짐육'),
   I('beef_stew', '소고기 국거리', 'meat', 'g', 100, false, '한우 국거리'),
@@ -42,12 +41,12 @@ export const INGREDIENTS = [
   I('oat', '오트밀', 'grain', 'g', 100, false, '유기농 오트밀'),
   I('seaweed', '아기김', 'grain', '봉', 1, false, '아기김'),
   I('miyeok', '건미역', 'grain', '봉', 1, false, '자른 미역'),
+  I('multigrain', '혼합잡곡', 'grain', 'g', 100, false, '유기농 혼합잡곡'),
   I('rice', '쌀', 'grain', 'g', 100, true, '쌀'),
   I('soy', '아기간장', 'grain', '', 1, true, '아기간장'),
   I('doenjang', '된장', 'grain', '', 1, true, '아기 된장'),
   I('sesame_oil', '참기름', 'grain', '', 1, true, '참기름'),
   I('sesame', '깨', 'grain', '', 1, true, '볶음참깨'),
   I('oil', '식용유', 'grain', '', 1, true, '현미유'),
-  I('flour', '부침가루', 'grain', '', 1, true, '부침가루'),
   I('starch', '전분', 'grain', '', 1, true, '감자전분'),
 ];

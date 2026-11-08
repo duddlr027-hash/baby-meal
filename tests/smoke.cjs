@@ -33,6 +33,7 @@ const path = require('node:path');
 
   await page.locator('[data-action="toggle"]').first().click();
   assert.equal(await page.locator('.recipe').count(), 1);
+  assert.match(await page.locator('.recipe .minutes').first().textContent(), /⏱ \d+분/);
 
   await page.locator('[data-action="pick"]').first().click();
   assert.equal(await page.locator('.sheet').count(), 1);

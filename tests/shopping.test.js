@@ -62,3 +62,11 @@ test('formatAmount', () => {
   assert.equal(formatAmount(1, '개'), '1개');
   assert.equal(formatAmount(1.5, '개'), '1.5개');
 });
+
+test('day의 dinnerForm 같은 비배열 필드는 무시', () => {
+  const plan = planOf(['m-beef']);
+  plan.days[0].dinner = [{ type: 'soup', recipeId: 'soup-egg', pinned: false }];
+  const list = buildShoppingList({ plan, recipes: MINI, ingredients: ING });
+  assert.equal(find(list, 'egg').qtyText, '10개');
+  assert.equal(find(list, 'beef_mince').qtyText, '100g');
+});

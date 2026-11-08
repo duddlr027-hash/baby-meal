@@ -1,12 +1,17 @@
 export const DAYS = 7;
 export const MEALS = ['breakfast', 'dinner'];
-export const MEAL_STRUCTURE = { breakfast: ['main', 'side'], dinner: ['main', 'side', 'side', 'soup'] };
+export const BREAKFAST = ['bowl'];
+export const DINNER_FORMS = { set: ['rice', 'soup', 'side'], bowl: ['bowl', 'soup'] };
+export const BOWL_DINNERS_MIN = 2;
+export const BOWL_DINNERS_MAX = 3;
 export const MEAL_LABEL = { breakfast: '아침', dinner: '저녁' };
-export const TYPE_LABEL = { main: '밥·죽·면', side: '반찬', soup: '국' };
+export const TYPE_LABEL = { bowl: '한 그릇', rice: '밥', soup: '국', side: '반찬' };
 export const PROTEIN_LABEL = { beef: '소고기', chicken: '닭고기', pork: '돼지고기', fish: '생선', tofu: '두부', egg: '계란' };
 export const TARGETS = { beef: 3, fish: 2 };
-export const RELAX_WARNING = '제외 재료가 많아 일부 메뉴가 반복돼요';
+export const RELAX_WARNING = '제외 재료가 많아 일부 메뉴가 반복되거나 겹쳐요';
+export const PLAN_VERSION = 2;
 const MAX_WEEKLY_USES = 2;
+const EVERYDAY_WEIGHT = 4;
 
 export function makeRng(seed) {
   let a = seed >>> 0;
@@ -19,12 +24,16 @@ export function makeRng(seed) {
   };
 }
 
-export function emptyPlan() {
+const slotsFor = (types) => types.map((type) => ({ type, recipeId: null, pinned: false }));
+
+export function emptyPlan(bowlDays = []) {
+  const bowl = new Set(bowlDays);
   return {
-    days: Array.from({ length: DAYS }, () => ({
-      breakfast: MEAL_STRUCTURE.breakfast.map((type) => ({ type, recipeId: null, pinned: false })),
-      dinner: MEAL_STRUCTURE.dinner.map((type) => ({ type, recipeId: null, pinned: false })),
-    })),
+    version: PLAN_VERSION,
+    days: Array.from({ length: DAYS }, (_, d) => {
+      const dinnerForm = bowl.has(d) ? 'bowl' : 'set';
+      return { dinnerForm, breakfast: slotsFor(BREAKFAST), dinner: slotsFor(DINNER_FORMS[dinnerForm]) };
+    }),
     warnings: [],
   };
 }
@@ -68,18 +77,26 @@ function others(plan, pos) {
   return out;
 }
 
+// 메인 재료 키: main 재료 + (단백질이 있으면) '@단백질'
+const keysOf = (r) => (r.protein === 'none' ? r.main : [...r.main, `@${r.protein}`]);
+
 function analyze(recipe, pos, rest, ctx) {
   const same = rest.filter((o) => o.recipeId === recipe.id);
   const otherMeal = pos.meal === 'breakfast' ? 'dinner' : 'breakfast';
+  const mates = rest
+    .filter((o) => o.dayIndex === pos.dayIndex && o.meal === pos.meal)
+    .map((o) => ctx.recipeById.get(o.recipeId))
+    .filter(Boolean);
+  const keyClash = keysOf(recipe).filter((k) => mates.some((m) => keysOf(m).includes(k)));
+  const methodClash = mates.some((m) => m.method === recipe.method) ? recipe.method : null;
   let proteinClash = null;
-  if (recipe.type === 'main' && recipe.protein !== 'none') {
-    const clash = rest.some((o) => {
-      if (o.dayIndex !== pos.dayIndex || o.meal !== otherMeal) return false;
-      const r = ctx.recipeById.get(o.recipeId);
-      return r?.type === 'main' && r.protein === recipe.protein;
-    });
+  if (recipe.protein !== 'none') {
+    const clash = rest.some((o) => o.dayIndex === pos.dayIndex && o.meal === otherMeal
+      && ctx.recipeById.get(o.recipeId)?.protein === recipe.protein);
     if (clash) proteinClash = otherMeal;
   }
+  const sameDayMethod = rest.some((o) => o.dayIndex === pos.dayIndex && o.meal === otherMeal
+    && ctx.recipeById.get(o.recipeId)?.method === recipe.method);
   return {
     uses: same.length,
     sameMeal: same.some((o) => o.dayIndex === pos.dayIndex && o.meal === pos.meal),
@@ -87,11 +104,14 @@ function analyze(recipe, pos, rest, ctx) {
     yesterday: same.some((o) => o.dayIndex === pos.dayIndex - 1),
     tomorrow: same.some((o) => o.dayIndex === pos.dayIndex + 1),
     proteinClash,
+    sameDayMethod: sameDayMethod ? otherMeal : null,
+    keyClash,
+    methodClash,
   };
 }
 
 function weightOf(recipe, rest, ctx) {
-  let w = 1;
+  let w = recipe.everyday ? EVERYDAY_WEIGHT : 1;
   const counts = { beef: 0, fish: 0 };
   const usedVeg = new Set();
   for (const o of rest) {
@@ -105,6 +125,16 @@ function weightOf(recipe, rest, ctx) {
   return w;
 }
 
+const weeklyOk = (c) => c.r.everyday || (c.a.uses < MAX_WEEKLY_USES && !c.a.sameDay && !c.a.yesterday && !c.a.tomorrow);
+const mealOk = (c) => c.a.keyClash.length === 0 && !c.a.methodClash;
+// 완화 순서: 단백질·같은 날 조리법 겹침 → 주간 반복 → 한 끼 규칙
+const TIERS = [
+  (c) => mealOk(c) && weeklyOk(c) && !c.a.proteinClash && !c.a.sameDayMethod,
+  (c) => mealOk(c) && weeklyOk(c),
+  (c) => mealOk(c),
+  () => true,
+];
+
 function pick(plan, pos, ctx, rng, excludeIds = []) {
   const type = slotAt(plan, pos).type;
   const rest = others(plan, pos);
@@ -114,11 +144,9 @@ function pick(plan, pos, ctx, rng, excludeIds = []) {
     .filter((c) => !c.a.sameMeal);
   if (!cands.length) return { recipeId: null, relaxed: false };
 
-  const weeklyOk = (c) => c.a.uses < MAX_WEEKLY_USES && !c.a.sameDay && !c.a.yesterday && !c.a.tomorrow;
-  let pool = cands.filter((c) => weeklyOk(c) && !c.a.proteinClash);
-  let relaxed = false;
-  if (!pool.length) { pool = cands.filter(weeklyOk); relaxed = true; }
-  if (!pool.length) { pool = cands; relaxed = true; }
+  const tier = TIERS.findIndex((f) => cands.some(f));
+  const pool = cands.filter(TIERS[tier]);
+  const relaxed = tier > 0;
 
   const weights = pool.map((c) => weightOf(c.r, rest, ctx));
   let x = rng() * weights.reduce((a, b) => a + b, 0);
@@ -128,6 +156,8 @@ function pick(plan, pos, ctx, rng, excludeIds = []) {
   }
   return { recipeId: pool[pool.length - 1].r.id, relaxed };
 }
+
+const missingText = (meal, type) => `${MEAL_LABEL[meal]} ${TYPE_LABEL[type]}에 맞는 메뉴가 없어요`;
 
 // shouldRefill(slot)이 true인 슬롯을 비우고 순서대로 다시 채운다 (mutates plan)
 function fill(plan, ctx, rng, shouldRefill) {
@@ -147,7 +177,7 @@ function fill(plan, ctx, rng, shouldRefill) {
     const res = pick(plan, p, ctx, rng);
     s.recipeId = res.recipeId;
     if (res.relaxed) warnings.add(RELAX_WARNING);
-    if (!res.recipeId) warnings.add(`${MEAL_LABEL[p.meal]} ${TYPE_LABEL[s.type]}에 맞는 메뉴가 없어요`);
+    if (!res.recipeId) warnings.add(missingText(p.meal, s.type));
   }
   plan.warnings = [...warnings];
   return plan;
@@ -158,18 +188,42 @@ function syncMissingWarnings(plan) {
   const missing = new Set();
   for (const p of positions(plan)) {
     const s = slotAt(plan, p);
-    if (!s.recipeId) missing.add(`${MEAL_LABEL[p.meal]} ${TYPE_LABEL[s.type]}에 맞는 메뉴가 없어요`);
+    if (!s.recipeId) missing.add(missingText(p.meal, s.type));
   }
   plan.warnings = [...plan.warnings.filter((w) => !w.endsWith('에 맞는 메뉴가 없어요')), ...missing];
   return plan;
 }
 
+const isV2 = (plan) => plan?.version === PLAN_VERSION;
+
+// 저녁 한 그릇 날짜: 📌 있는 날의 형태는 유지, 나머지는 무작위로 2~3일
+function chooseBowlDays(existingPlan, ctx, rng) {
+  const forcedBowl = [];
+  const forcedSet = new Set();
+  if (isV2(existingPlan)) {
+    existingPlan.days.forEach((day, d) => {
+      const hasPin = day.dinner.some((s) => s.pinned && s.recipeId && ctx.recipeById.has(s.recipeId));
+      if (!hasPin) return;
+      if (day.dinnerForm === 'bowl') forcedBowl.push(d);
+      else forcedSet.add(d);
+    });
+  }
+  const target = BOWL_DINNERS_MIN + Math.floor(rng() * (BOWL_DINNERS_MAX - BOWL_DINNERS_MIN + 1));
+  const free = [...Array(DAYS).keys()].filter((d) => !forcedBowl.includes(d) && !forcedSet.has(d));
+  const days = [...forcedBowl];
+  while (days.length < target && free.length) days.push(free.splice(Math.floor(rng() * free.length), 1)[0]);
+  return days;
+}
+
 export function generateWeek({ existingPlan = null, rng = Math.random, ...data }) {
   const ctx = makeCtx(data);
-  const plan = emptyPlan();
-  if (existingPlan) {
+  const plan = emptyPlan(chooseBowlDays(existingPlan, ctx, rng));
+  if (isV2(existingPlan)) {
     for (const p of positions(plan)) {
-      const old = existingPlan.days?.[p.dayIndex]?.[p.meal]?.[p.slotIndex];
+      const oldDay = existingPlan.days?.[p.dayIndex];
+      if (!oldDay) continue;
+      if (p.meal === 'dinner' && oldDay.dinnerForm !== plan.days[p.dayIndex].dinnerForm) continue;
+      const old = oldDay[p.meal]?.[p.slotIndex];
       if (old?.pinned && old.recipeId && ctx.recipeById.has(old.recipeId)) {
         Object.assign(slotAt(plan, p), { recipeId: old.recipeId, pinned: true });
       }
@@ -179,6 +233,7 @@ export function generateWeek({ existingPlan = null, rng = Math.random, ...data }
 }
 
 export function refreshPlan({ plan, rng = Math.random, ...data }) {
+  if (!isV2(plan)) return generateWeek({ ...data, rng });
   const ctx = makeCtx(data);
   return fill(clone(plan), ctx, rng, (s) => {
     const r = s.recipeId && ctx.recipeById.get(s.recipeId);
@@ -206,16 +261,22 @@ export function candidatesFor({ plan, dayIndex, meal, slotIndex, ...data }) {
   const ctx = makeCtx(data);
   const pos = { dayIndex, meal, slotIndex };
   const rest = others(plan, pos);
+  const keyName = (k) => (k.startsWith('@') ? PROTEIN_LABEL[k.slice(1)] : ctx.ingById.get(k)?.name ?? k);
   return baseCandidates(ctx, meal, slotAt(plan, pos).type)
     .map((recipe) => {
       const a = analyze(recipe, pos, rest, ctx);
       const notes = [];
       if (a.sameMeal) notes.push('이 끼니에 이미 있어요');
-      if (a.sameDay) notes.push('오늘 다른 끼니에 있어요');
-      if (a.uses) notes.push(`이번 주 ${a.uses}회 사용`);
-      if (a.yesterday) notes.push('어제도 나왔어요');
-      if (a.tomorrow) notes.push('내일도 나와요');
+      if (a.keyClash.length) notes.push(`메인 재료 겹침: ${[...new Set(a.keyClash.map(keyName))].join(', ')}`);
+      if (a.methodClash) notes.push(`조리법 겹침: ${a.methodClash}`);
+      if (!recipe.everyday) {
+        if (a.sameDay) notes.push('오늘 다른 끼니에 있어요');
+        if (a.uses) notes.push(`이번 주 ${a.uses}회 사용`);
+        if (a.yesterday) notes.push('어제도 나왔어요');
+        if (a.tomorrow) notes.push('내일도 나와요');
+      }
       if (a.proteinClash) notes.push(`오늘 ${MEAL_LABEL[a.proteinClash]}에도 ${PROTEIN_LABEL[recipe.protein]}`);
+      if (a.sameDayMethod) notes.push(`오늘 ${MEAL_LABEL[a.sameDayMethod]}에도 ${recipe.method}`);
       return { recipe, notes };
     })
     .sort((x, y) => x.recipe.name.localeCompare(y.recipe.name, 'ko'));

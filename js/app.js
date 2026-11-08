@@ -1,10 +1,10 @@
-import { INGREDIENTS } from './data/ingredients.js';
-import { RECIPES } from './data/recipes.js';
-import { generateWeek, refreshPlan, rerollSlot, candidatesFor, setSlot, unpinSlot, MEALS, MEAL_LABEL, TYPE_LABEL } from './planner.js';
-import { buildShoppingList, formatAmount, SECTIONS } from './shopping.js';
-import { weekStart, addDays, ageInMonths, weekLabel, dayLabel } from './dates.js';
-import { titleFor } from './text.js';
-import { createStore } from './storage.js';
+import { INGREDIENTS } from './data/ingredients.js?v=2';
+import { RECIPES } from './data/recipes.js?v=2';
+import { generateWeek, refreshPlan, rerollSlot, candidatesFor, setSlot, unpinSlot, PLAN_VERSION, MEALS, MEAL_LABEL, TYPE_LABEL } from './planner.js?v=2';
+import { buildShoppingList, formatAmount, SECTIONS } from './shopping.js?v=2';
+import { weekStart, addDays, ageInMonths, weekLabel, dayLabel } from './dates.js?v=2';
+import { titleFor } from './text.js?v=2';
+import { createStore } from './storage.js?v=2';
 
 const store = createStore();
 const recipeById = new Map(RECIPES.map((r) => [r.id, r]));
@@ -22,6 +22,7 @@ const state = {
   picker: null,       // { dayIndex, meal, slotIndex, query }
   message: false,     // false | 'auto' | 'preview'
   flash: '',
+  migrated: false,    // 이전 버전 저장 계획을 새로 짠 직후 안내 배너
   settingsDraft: null, // 저장 전 설정 폼 값 { name, birthday, message }
   previewText: '',
 };
@@ -34,6 +35,7 @@ const toggleIn = (arr, v) => { const i = arr.indexOf(v); if (i >= 0) arr.splice(
 
 function loadWeek() {
   const saved = store.loadPlan(state.week);
+  state.migrated = !!saved && saved.version !== PLAN_VERSION;
   state.plan = saved ? refreshPlan({ ...data(), plan: saved }) : generateWeek(data());
   store.savePlan(state.week, state.plan);
   state.checks = store.loadChecks(state.week);
@@ -72,6 +74,7 @@ function renderPlan() {
       <button class="week-label" data-action="this-week" aria-label="이번 주로">${weekLabel(state.week)}</button>
       <button data-action="week" data-delta="7" aria-label="다음 주">▶</button>
     </div>
+    ${state.migrated ? '<div class="banner">새 버전으로 이번 주 식단을 새로 짰어요</div>' : ''}
     ${p.warnings.map((w) => `<div class="banner">${esc(w)}</div>`).join('')}
     ${p.days.map((day, d) => `
       <section class="card day">
@@ -111,7 +114,7 @@ function renderRecipe(r) {
     const ing = ingById.get(it.id);
     return `<li>${esc(ing.name)} <span class="muted">${it.qty ? formatAmount(it.qty, ing.unit) : '약간'}</span></li>`;
   }).join('');
-  return `<div class="recipe"><ul>${items}</ul><ol>${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`;
+  return `<div class="recipe"><p class="minutes">⏱ ${r.minutes}분</p><ul>${items}</ul><ol>${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`;
 }
 
 function renderShop() {
@@ -233,7 +236,7 @@ app.addEventListener('click', (e) => {
   if (!el) return;
   switch (el.dataset.action) {
     case 'tab':
-      state.tab = el.dataset.tab; state.flash = ''; state.settingsDraft = null; render(); window.scrollTo(0, 0); break;
+      state.tab = el.dataset.tab; state.flash = ''; state.migrated = false; state.settingsDraft = null; render(); window.scrollTo(0, 0); break;
     case 'week':
       state.week = addDays(state.week, Number(el.dataset.delta)); state.open.clear(); loadWeek(); render(); break;
     case 'this-week': {

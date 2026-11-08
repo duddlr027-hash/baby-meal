@@ -27,7 +27,7 @@ export function buildShoppingList({ plan, recipes, ingredients }) {
   const pantry = new Map();
 
   for (const day of plan.days) {
-    for (const slots of Object.values(day)) {
+    for (const slots of [day.breakfast ?? [], day.dinner ?? []]) {
       for (const slot of slots) {
         const recipe = slot.recipeId && recipeById.get(slot.recipeId);
         if (!recipe) continue;
