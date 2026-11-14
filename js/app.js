@@ -1,10 +1,10 @@
-import { INGREDIENTS } from './data/ingredients.js?v=2';
-import { RECIPES } from './data/recipes.js?v=2';
-import { generateWeek, refreshPlan, rerollSlot, candidatesFor, setSlot, unpinSlot, PLAN_VERSION, MEALS, MEAL_LABEL, TYPE_LABEL } from './planner.js?v=2';
-import { buildShoppingList, formatAmount, SECTIONS } from './shopping.js?v=2';
-import { weekStart, addDays, ageInMonths, weekLabel, dayLabel } from './dates.js?v=2';
-import { titleFor } from './text.js?v=2';
-import { createStore } from './storage.js?v=2';
+import { INGREDIENTS } from './data/ingredients.js?v=3';
+import { RECIPES } from './data/recipes.js?v=3';
+import { generateWeek, refreshPlan, rerollSlot, candidatesFor, setSlot, unpinSlot, PLAN_VERSION, MEALS, MEAL_LABEL, TYPE_LABEL } from './planner.js?v=3';
+import { buildShoppingList, formatAmount, SECTIONS } from './shopping.js?v=3';
+import { weekStart, addDays, ageInMonths, weekLabel, dayLabel } from './dates.js?v=3';
+import { titleFor, formatViews } from './text.js?v=3';
+import { createStore } from './storage.js?v=3';
 
 const store = createStore();
 const recipeById = new Map(RECIPES.map((r) => [r.id, r]));
@@ -114,7 +114,10 @@ function renderRecipe(r) {
     const ing = ingById.get(it.id);
     return `<li>${esc(ing.name)} <span class="muted">${it.qty ? formatAmount(it.qty, ing.unit) : '약간'}</span></li>`;
   }).join('');
-  return `<div class="recipe"><p class="minutes">⏱ ${r.minutes}분</p><ul>${items}</ul><ol>${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`;
+  const source = r.source
+    ? `<a class="source" href="${esc(r.source.url)}" target="_blank" rel="noopener">원문 보기 · 조회수 ${formatViews(r.source.views)}</a>`
+    : '';
+  return `<div class="recipe"><p class="minutes">⏱ ${r.minutes}분</p>${source}<ul>${items}</ul><ol>${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`;
 }
 
 function renderShop() {

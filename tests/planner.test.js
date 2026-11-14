@@ -200,10 +200,10 @@ for (let seed = 1; seed <= 30; seed++) {
 
 test('전체 데이터: 제외 재료가 든 레시피는 나오지 않는다', () => {
   for (let seed = 1; seed <= 10; seed++) {
-    const plan = generateWeek({ ...FULL, excluded: ['egg', 'shrimp'], rng: makeRng(seed) });
+    const plan = generateWeek({ ...FULL, excluded: ['egg', 'anchovy'], rng: makeRng(seed) });
     for (const s of slots(plan)) {
       const r = byIdF.get(s.recipeId);
-      if (r) assert.ok(!r.items.some((it) => it.id === 'egg' || it.id === 'shrimp'), r.id);
+      if (r) assert.ok(!r.items.some((it) => it.id === 'egg' || it.id === 'anchovy'), r.id);
     }
   }
 });

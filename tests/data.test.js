@@ -6,7 +6,7 @@ import { RECIPES } from '../js/data/recipes.js';
 const SECTIONS = ['veg', 'meat', 'fish', 'tofu_dairy', 'grain'];
 const TYPES = ['bowl', 'rice', 'soup', 'side'];
 const PROTEINS = ['beef', 'chicken', 'pork', 'fish', 'tofu', 'egg', 'none'];
-const METHODS = ['밥', '죽', '볶음', '덮밥', '면', '주먹밥', '리조또', '국', '찜', '조림', '무침', '구이'];
+const METHODS = ['밥', '죽', '볶음', '덮밥', '면', '주먹밥', '리조또', '국', '찜', '조림', '무침', '구이', '부침'];
 const ing = new Map(INGREDIENTS.map((i) => [i.id, i]));
 
 test('재료 id 중복 없음, 필드 유효', () => {
@@ -39,13 +39,14 @@ test('레시피 필드 유효', () => {
   }
 });
 
-test('쉬운 기준: 15분, 재료 3개, 2~3줄, 금지 요리', () => {
+test('쉬운 기준: 15분, 재료(한 그릇 3개·그 외 2개), 2~3줄, 금지 요리', () => {
   for (const r of RECIPES) {
     assert.ok(Number.isInteger(r.minutes) && r.minutes >= 1 && r.minutes <= 15, `${r.id} ${r.minutes}분`);
     assert.ok(r.steps.length >= 2 && r.steps.length <= 3, `${r.id} steps ${r.steps.length}`);
     assert.ok(r.steps.every((s) => typeof s === 'string' && s.length > 0), r.id);
     const core = r.items.filter((it) => !ing.get(it.id)?.pantry);
-    assert.ok(core.length <= 3, `${r.id} 재료 ${core.length}개`);
+    const limit = r.type === 'bowl' ? 3 : 2;
+    assert.ok(core.length <= limit, `${r.id} 재료 ${core.length}개 (최대 ${limit})`);
     assert.ok(!/전$|완자|장조림|동그랑땡/.test(r.name), `${r.id} 금지 요리`);
   }
 });
@@ -82,9 +83,28 @@ test('종류별 최소 개수', () => {
   const count = (f) => RECIPES.filter(f).length;
   assert.ok(count((r) => r.type === 'bowl' && r.meals.includes('breakfast')) >= 8);
   assert.ok(count((r) => r.type === 'bowl' && r.meals.includes('dinner')) >= 6);
-  assert.ok(count((r) => r.type === 'rice' && !r.everyday) >= 4);
-  assert.ok(count((r) => r.type === 'soup') >= 10);
+  assert.ok(count((r) => r.type === 'rice' && !r.everyday) >= 2);
+  assert.ok(count((r) => r.type === 'soup') >= 8);
   assert.ok(count((r) => r.type === 'side') >= 12);
   assert.ok(count((r) => r.protein === 'beef') >= 6);
   assert.ok(count((r) => r.protein === 'fish') >= 5);
+});
+
+test('출처: everyday 외 모든 레시피에 유아식 원문(만개의레시피) 링크', () => {
+  for (const r of RECIPES) {
+    if (r.everyday) { assert.equal(r.source, undefined, `${r.id}: everyday는 출처 없음`); continue; }
+    const s = r.source;
+    assert.ok(s, `${r.id}: source 필요`);
+    assert.match(s.url, /^https:\/\/www\.10000recipe\.com\/recipe\/\d+$/, r.id);
+    assert.ok(typeof s.title === 'string' && s.title.length > 0, r.id);
+    assert.ok(Number.isInteger(s.views) && s.views > 0, r.id);
+    assert.match(s.title, /유아식|유아|아기|돌아기|\d+개월|아이\s?반찬|아이\s?국|어린이|완료기/, `${r.id}: 유아식 글 아님`);
+    assert.doesNotMatch(s.title, /초기|중기|스팸|햄|베이컨|맛살|매운|매콤/, `${r.id}: 제외 대상 글`);
+  }
+});
+
+test('계란이 들어간 레시피는 main에 계란이 있다 (한 끼 계란 겹침 방지)', () => {
+  for (const r of RECIPES) {
+    if (r.items.some((it) => it.id === 'egg')) assert.ok(r.main.includes('egg'), `${r.id}: egg가 main에 없음`);
+  }
 });

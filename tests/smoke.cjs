@@ -17,7 +17,7 @@ const path = require('node:path');
   await page.fill('input[name="name"]', '도윤');
   await page.fill('input[name="birthday"]', '2025-03-01');
   await page.fill('textarea[name="message"]', '매일 고생 많아요.\n사랑해요!');
-  await page.click('[data-action="draft-exclude"][data-id="shrimp"]');
+  await page.click('[data-action="draft-exclude"][data-id="anchovy"]');
   await page.click('form[data-form="setup"] button[type="submit"]');
 
   assert.equal(await page.locator('.day').count(), 7);
@@ -34,12 +34,13 @@ const path = require('node:path');
   await page.locator('[data-action="toggle"]').first().click();
   assert.equal(await page.locator('.recipe').count(), 1);
   assert.match(await page.locator('.recipe .minutes').first().textContent(), /⏱ \d+분/);
+  assert.ok((await page.locator('.recipe a.source').first().getAttribute('href')).startsWith('https://www.10000recipe.com/recipe/'));
 
   await page.locator('[data-action="pick"]').first().click();
   assert.equal(await page.locator('.sheet').count(), 1);
-  await page.fill('.search', '연어');
+  await page.fill('.search', '치즈볼');
   await page.locator('[data-action="choose"]').first().click();
-  assert.match(await page.locator('[data-action="toggle"]').first().textContent(), /연어/);
+  assert.match(await page.locator('[data-action="toggle"]').first().textContent(), /치즈볼/);
   assert.equal(await page.locator('[data-action="unpin"]').count(), 1);
   await page.screenshot({ path: path.join(out, '2-picked.png') });
 
